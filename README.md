@@ -7,6 +7,11 @@ This project is a Streamlit-based web application that recognizes handwritten te
 - Recognize handwritten text using the TrOCR model
 - Display the uploaded image and extracted text
 
+## Live Demo
+You can test the application live at:  
+[Handwriting Detection on Hugging Face](https://huggingface.co/spaces/Tahir5/Handwriting-detection)
+
+
 ## Installation
 To run this application, follow these steps:
 
