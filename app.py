@@ -1,48 +1,200 @@
+from datetime import datetime
+import io
 import streamlit as st
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 from PIL import Image
 import requests
 import torch
+import numpy as np
+
+# 🧠 SET PAGE CONFIG FIRST!
+st.set_page_config(page_title="TrOCR Handwritten Recognition", layout="wide")
 
 def load_model():
-    processor = TrOCRProcessor.from_pretrained('microsoft/trocr-base-handwritten')
+    processor = TrOCRProcessor.from_pretrained('microsoft/trocr-base-handwritten', use_fast=True)
     model = VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-base-handwritten')
     return processor, model
 
 def recognize_text(image, processor, model):
-    pixel_values = processor(images=image, return_tensors="pt").pixel_values
+    # Resize the image (you can change the size if needed)
+    image = image.resize((1280, 1280))
+    
+    # Convert the image to a numpy array and then to a tensor
+    image_np = np.array(image)
+    
+    # Ensure the image is in float32 format (PyTorch expects float32 for processing)
+    image_tensor = torch.tensor(image_np, dtype=torch.float32).unsqueeze(0)  # Add batch dimension
+    
+    # Process the image with padding
+    pixel_values = processor(images=image_tensor, return_tensors="pt", padding="max_length").pixel_values
+    
+    # Generate text using the model
     generated_ids = model.generate(pixel_values)
     generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    
     return generated_text
 
+
+# Sidebar info with custom profile section
+st.sidebar.title("ℹ️ About")
+st.sidebar.markdown("---")
+st.sidebar.markdown(
+    """
+    <style>
+        .custom-sidebar {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            width: 650px;
+            padding: 10px;
+        }
+        .profile-container {
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            width: 100%;
+        }
+        .profile-image {
+            width: 200px;
+            height: auto;
+            border-radius: 15px;
+            box-shadow: 0px 4px 10px rgba(0,0,0,0.2);
+            margin-right: 15px;
+        }
+        .profile-details {
+            font-size: 14px;
+            width: 100%;
+        }
+        .profile-details h3 {
+            margin: 0 0 10px;
+            font-size: 18px;
+            color: #333;
+        }
+        .profile-details p {
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+        }
+        .profile-details a {
+            text-decoration: none;
+            color: #1a73e8;
+        }
+        .profile-details a:hover {
+            text-decoration: underline;
+        }
+        .icon-img {
+            width: 18px;
+            height: 18px;
+            margin-right: 6px;
+        }
+    </style>
+
+    <div class="custom-sidebar">
+        <div class="profile-container">
+            <img class="profile-image" src="https://res.cloudinary.com/dwhfxqolu/image/upload/v1744014185/pnhnaejyt3udwalrmnhz.jpg" alt="Profile Image">
+            <div class="profile-details">
+                <h3>👨‍💻 Developed by:<br> Tahir Abbas Shaikh</h3>
+                <p>
+                    <img class="icon-img" src="https://upload.wikimedia.org/wikipedia/commons/4/4e/Gmail_Icon.png" alt="Gmail">
+                    <strong>Email:</strong> <a href="mailto:tahirabbasshaikh555@gmail.com">tahirabbasshaikh555@gmail.com</a>
+                </p>
+                <p>📍 <strong>Location:</strong> Sukkur, Sindh, Pakistan</p>
+                <p>
+                    <img class="icon-img" src="https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png" alt="GitHub">
+                    <strong>GitHub:</strong> <a href="https://github.com/Tahir-Abbas-555" target="_blank">Tahir-Abbas-555</a>
+                </p>
+                <p>
+                    <img class="icon-img" src="https://huggingface.co/front/assets/huggingface_logo-noborder.svg" alt="HuggingFace">
+                    <strong>HuggingFace:</strong> <a href="https://huggingface.co/Tahir5" target="_blank">Tahir5</a>
+                </p>
+            </div>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+def display_header():
+    st.markdown(
+        """
+        <style>
+            .title {
+                font-size: 2.5em;
+                font-weight: 700;
+                color: #4a90e2;
+                text-align: center;
+                margin-bottom: 20px;
+            }
+            .caption {
+                text-align: center;
+                font-style: italic;
+                color: #666;
+            }
+            .stButton>button {
+                width: 100%;
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                font-weight: 600;
+            }
+        </style>
+        <div class="title">📝 Handwritten Text Recognition with TrOCR</div>
+        """,
+        unsafe_allow_html=True
+    )
+
 def main():
-    st.title("Handwritten Text Recognition with TrOCR")
-    
+    display_header()
+
     processor, model = load_model()
+
+    tab1, tab2 = st.tabs(["📤 Upload Image", "🌐 Enter Image URL"])
+
+    image = None
+
+    with tab1:
+        uploaded_file = st.file_uploader("Upload a handwritten image", type=["png", "jpg", "jpeg"])
+        if uploaded_file:
+            try:
+                image = Image.open(uploaded_file).convert("RGB")
+            except Exception as e:
+                st.error(f"Error loading uploaded file: {e}")
     
-    uploaded_file = st.file_uploader("Upload an image", type=["png", "jpg", "jpeg"])
-    image_url = st.text_input("Or enter an image URL:", "https://fki.tic.heia-fr.ch/static/img/a01-122-02-00.jpg")
-    
-    if uploaded_file is not None:
-        image = Image.open(uploaded_file).convert("RGB")
-    elif image_url:
-        try:
-            image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
-        except Exception as e:
-            st.error(f"Error loading image: {e}")
-            return
+    with tab2:
+        image_url = st.text_input("Paste image URL here")
+        if image_url:
+            try:
+                response = requests.get(image_url, stream=True, timeout=5)
+                response.raise_for_status()
+                image = Image.open(response.raw).convert("RGB")
+            except Exception as e:
+                st.error(f"Error loading image from URL: {e}")
+
+    if image is not None:
+        col1, col2 = st.columns([2, 3])
+        with col1:
+            st.image(image, caption="🖼️ Input Image", use_column_width=True)
+
+        with col2:
+            if st.button("🔍 Recognize Handwritten Text"):
+                with st.spinner("Processing... Please wait."):
+                    try:
+                        text = recognize_text(image, processor, model)
+                        st.success("✅ Text Recognized Successfully!")
+                        st.text_area("📜 Recognized Text", value=text, height=200)
+
+                        buffer = io.StringIO()
+                        buffer.write(text)
+                        st.download_button(
+                            label="📥 Download Recognized Text",
+                            data=buffer.getvalue(),
+                            file_name=f"recognized_text_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                            mime="text/plain"
+                        )
+                    except Exception as e:
+                        st.error(f"Recognition failed: {e}")
     else:
-        st.warning("Please upload an image or provide a URL.")
-        return
-    
-    st.image(image, caption="Uploaded Image", use_column_width=True)
-    
-    if st.button("Recognize Text"):
-        with st.spinner("Processing..."):
-            text = recognize_text(image, processor, model)
-        
-        st.success("Recognized Text:")
-        st.write(text)
+        st.info("Please upload an image or paste a URL to begin.")
 
 if __name__ == "__main__":
     main()
